@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 const NodulePropertiesPanel = ({ shape, onSave, onCancel }) => {
     const PROPERTY_OPTIONS = {
-        nodule: {
-          composition: ['Cystic', 'Spongiform', 'Mixed', 'Solid', 'Other'],
-          echogenicity: ['Anechoic', 'Hyperechoic', 'Hypoechoic', 'Isoechoic', 'Heterogeneous'],
-          shape: ['Oval', 'Round', 'Taller-than-wide', 'Irregular'],
-          margin: ['Smooth', 'Ill-defined', 'Lobulated', 'Irregular', 'Extrathyroidal'],
-          echogenicFoci: ['None', 'Macrocalcifications', 'Peripheral', 'Punctate', 'Comet-tail']
-        },
-        parenchyma: {
-          heterojenitesi: ['Yok', 'Hafif', 'Orta', 'Belirgin']
-        }
+        'nodule-polygon': {
+            composition: ['Cystic', 'Spongiform', 'Mixed', 'Solid', 'Other'],
+            echogenicity: ['Anechoic', 'Hyperechoic', 'Hypoechoic', 'Isoechoic', 'Heterogeneous'],
+            shape: ['Oval', 'Round', 'Taller-than-wide', 'Irregular'],
+            margin: ['Smooth', 'Ill-defined', 'Lobulated', 'Irregular', 'Extrathyroidal'],
+            echogenicFoci: ['None', 'Macrocalcifications', 'Peripheral', 'Punctate', 'Comet-tail']
+          },
+          'parenchyma': {
+            heterojenitesi: ['Yok', 'Hafif', 'Orta', 'Belirgin']
+          }
       };
     const [properties, setProperties] = useState({
       composition: '',

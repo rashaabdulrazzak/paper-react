@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import paper from 'paper'
 import ShapeSidebar from './ShapeSidebar';
 import NodulePropertiesPanel from './NodulePropertiesPanel';
+import ShapePropertiesPanel from './ShapePropertiesPanel';
 const ImageWithShapes = () => {
   const [mode, setMode] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
@@ -19,11 +20,16 @@ const ImageWithShapes = () => {
     margin: '',
     echogenicFoci: ''
   });
+  const [currentShape, setCurrentShape] = useState(null);
+const [shapeProperties, setShapeProperties] = useState({});
+
   // Color constants for different annotation types
   const COLORS = {
-    nodule: 'red',
-    region: 'blue',
-    parenchyma: 'purple'
+    'nodule-polygon': 'red',  // Changed from 'nodule'
+    'nodule': 'red',
+    'strap': 'blue',
+    'region': 'blue',
+    'parenchyma': 'purple'
   };
  
 
@@ -141,19 +147,48 @@ const ImageWithShapes = () => {
         points: polygonPoints,
         strokeColor: 
           mode === 'nodule-polygon' ? COLORS.nodule :
-          mode === 'strap' ? COLORS.region :
-          COLORS.parenchyma,
-        dataType: 
-          mode === 'nodule-polygon' ? 'nodule' :
-          mode === 'strap' ? 'region' :
-          'parenchyma',
-          properties: null
+          mode === 'parenchyma' ? COLORS.parenchyma :
+          COLORS.region,
+        dataType: mode,
+        properties: mode === 'strap' ? undefined : null // No properties for Strap Kasi
       };
-      setCurrentNodule(newShape);
-      setPolygonPoints([]);
-      //setShapes(prev => [...prev, newShape]);
+       // Only show properties panel for nodule and parenchyma
+    if (mode === 'nodule-polygon' || mode === 'parenchyma') {
+      setCurrentShape(newShape);
+      // Initialize properties based on shape type
+      setShapeProperties(
+        mode === 'nodule-polygon' ? {
+          composition: '',
+          echogenicity: '',
+          shape: '',
+          margin: '',
+          echogenicFoci: ''
+        } : {
+          heterojenitesi: ''
+        }
+      );
+    } else {
+      // For Strap Kasi, add directly to shapes with no properties
+      setShapes(prev => [...prev, newShape]);
     }
+    
     setPolygonPoints([]);
+    
+      // Initialize properties based on shape type
+      if (mode === 'nodule-polygon') {
+        setShapeProperties({
+          composition: '',
+          echogenicity: '',
+          shape: '',
+          margin: '',
+          echogenicFoci: ''
+        });
+      } else if (mode === 'parenchyma') {
+        setShapeProperties({
+          heterojenitesi: ''
+        });
+      }
+    }
   };
 
   const handleImageUpload = (e) => {
@@ -352,7 +387,18 @@ const saveNoduleProperties = (properties) => {
   setShapes(prev => [...prev, finalizedNodule]);
   setCurrentNodule(null);
 };
-
+const saveShapeProperties = (properties) => {
+  if (!currentShape) return;
+  
+  const finalizedShape = {
+    ...currentShape,
+    properties: properties
+  };
+  
+  setShapes(prev => [...prev, finalizedShape]);
+  setCurrentShape(null);
+  setShapeProperties({});
+};
   return (
     <div className="app-container">
     {/* Sidebar */}
@@ -368,13 +414,25 @@ onHighlightShape={highlightShape}
     <div className="main-content">
       <h1>Image Annotation Tool</h1>
       <div style={{ marginBottom: '20px' }}>
-      {currentNodule && (
-  <NodulePropertiesPanel
-    shape={currentNodule}
-    onSave={saveNoduleProperties}
-    onCancel={() => setCurrentNodule(null)}
-  />
-)}
+      {/*currentNodule && (
+        <NodulePropertiesPanel
+          shape={currentNodule}
+          onSave={saveNoduleProperties}
+          onCancel={() => setCurrentNodule(null)}
+        />
+      )*/}
+      {currentShape && currentShape.dataType !== 'strap' && (
+      <ShapePropertiesPanel
+        shapeType={currentShape.dataType}
+        properties={shapeProperties}
+        onSave={saveShapeProperties}
+        onCancel={() => {
+          setCurrentShape(null);
+          setShapeProperties({});
+        }}
+      />
+    )}
+
         <div style={{ marginBottom: '10px' }}>
           <strong>Nodule Annotations:</strong>
           <button 

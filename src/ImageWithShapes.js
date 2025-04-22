@@ -1,63 +1,80 @@
-import React, { useState, useRef, useEffect } from "react";
-import paper from "paper";
-import ShapeSidebar from "./ShapeSidebar";
-
-import { Switch, Button } from "antd";
-
+import React, { useState, useRef, useEffect } from 'react';
+import paper from 'paper'
+import ShapeSidebar from './ShapeSidebar';
+import NodulePropertiesPanel from './NodulePropertiesPanel';
 const ImageWithShapes = () => {
   const [mode, setMode] = useState(null);
   const [polygonPoints, setPolygonPoints] = useState([]);
-  const [imageUrl, setImageUrl] = useState(
-    "https://letsenhance.io/static/73136da51c245e80edc6ccfe44888a99/1015f/MainBefore.jpg"
-  );
-  const [imageInfo, setImageInfo] = useState({
-    url: "https://letsenhance.io/static/73136da51c245e80edc6ccfe44888a99/1015f/MainBefore.jpg",
-    suitableForUse: false,
-  });
+  const [imageUrl, setImageUrl] = useState('https://letsenhance.io/static/73136da51c245e80edc6ccfe44888a99/1015f/MainBefore.jpg');
   const [shapes, setShapes] = useState([]);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const toolsDisabled = imageInfo.suitableForUse;
-  const [showSidebar, setShowSidebar] = useState(false);
-
+  const [selectedShape, setSelectedShape] = useState(null);
+  const [currentNodule, setCurrentNodule] = useState(null);
+  const [noduleProperties, setNoduleProperties] = useState({
+    composition: '',
+    echogenicity: '',
+    shape: '',
+    margin: '',
+    echogenicFoci: ''
+  });
   // Color constants for different annotation types
   const COLORS = {
-    nodule: "red",
-    region: "blue",
-    parenchyma: "purple",
+    nodule: 'red',
+    region: 'blue',
+    parenchyma: 'purple'
   };
+ 
 
   useEffect(() => {
     if (!canvasRef.current || !imageUrl) return;
 
     paper.setup(canvasRef.current);
+
+     // Add zoom/pan tools
+  paper.view.onMouseDrag = (event) => {
+    if (event.modifiers.space) { // Hold space to pan
+      paper.view.center = paper.view.center.subtract(event.delta);
+    }
+  };
+
+  paper.view.onMouseWheel = (event) => {
+    const zoomFactor = 1.1;
+    const newZoom = event.delta.y > 0 ? 
+      paper.view.zoom * zoomFactor : 
+      paper.view.zoom / zoomFactor;
+    
+    paper.view.zoom = Math.min(Math.max(newZoom, 0.1), 10); // Limit zoom range
+  };
     redrawShapes(); // Draw existing shapes immediately after setup
 
     const handleMouseDown = (event) => {
-      if (imageInfo.suitableForUse) return; // Skip if disabled
-
-      if (mode === "circle") {
+      if (mode === 'circle') {
         const newShape = {
           id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-          type: "circle",
+          type: 'circle',
           center: [event.point.x, event.point.y],
           radius: 30,
           strokeColor: COLORS.nodule,
-          dataType: "nodule",
+          dataType: 'nodule'
         };
-        setShapes((prev) => [...prev, newShape]);
-      } else if (mode && mode !== "circle") {
-        setPolygonPoints((prev) => [...prev, [event.point.x, event.point.y]]);
+        setShapes(prev => [...prev, newShape]);
+      } else if (mode && mode !== 'circle') {
+        setPolygonPoints(prev => [...prev, [event.point.x, event.point.y]]);
       }
     };
 
     paper.view.onMouseDown = handleMouseDown;
 
     return () => {
-      paper.view.off("mousedown");
+      paper.view.off('mousedown');
+       // If we have a currentNodule but cancel without saving
+        if (currentNodule) {
+          setCurrentNodule(null);
+        }
     };
-  }, [imageUrl, mode]);
+  }, [imageUrl, mode],currentNodule);
 
   // Redraw everything whenever shapes or polygonPoints change
   useEffect(() => {
@@ -68,50 +85,48 @@ const ImageWithShapes = () => {
 
   const redrawShapes = () => {
     if (!paper.project) return;
-
+    
     // Clear only the active layer, keeping other layers intact
     paper.project.activeLayer.removeChildren();
-
+    
     // Draw all completed shapes
-    shapes.forEach((shape) => {
-      if (shape.type === "circle") {
+    shapes.forEach(shape => {
+      if (shape.type === 'circle') {
         new paper.Path.Circle({
           center: new paper.Point(shape.center[0], shape.center[1]),
           radius: shape.radius,
           strokeColor: shape.strokeColor,
-          strokeWidth: 2,
+          strokeWidth: 2
         }).data = {
           id: shape.id,
-          strokeColor: shape.strokeColor,
+          strokeColor: shape.strokeColor
         };
-      } else if (shape.type === "polygon") {
+      } else if (shape.type === 'polygon') {
         new paper.Path({
           segments: shape.points,
           strokeColor: shape.strokeColor,
           strokeWidth: 2,
-          closed: true,
+          closed: true
         }).data = {
           id: shape.id,
-          strokeColor: shape.strokeColor,
+          strokeColor: shape.strokeColor
         };
       }
     });
 
     // Draw the current in-progress polygon
     if (polygonPoints.length > 0) {
-      const color =
-        mode === "nodule-polygon"
-          ? COLORS.nodule
-          : mode === "strap"
-          ? COLORS.region
-          : COLORS.parenchyma;
-
+      const color = 
+        mode === 'nodule-polygon' ? COLORS.nodule :
+        mode === 'strap' ? COLORS.region :
+        COLORS.parenchyma;
+      
       new paper.Path({
         segments: polygonPoints,
         strokeColor: color,
         strokeWidth: 2,
         dashArray: [5, 5],
-        closed: polygonPoints.length > 2,
+        closed: polygonPoints.length > 2
       });
     }
 
@@ -122,22 +137,21 @@ const ImageWithShapes = () => {
     if (polygonPoints.length >= 3) {
       const newShape = {
         id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-        type: "polygon",
+        type: 'polygon',
         points: polygonPoints,
-        strokeColor:
-          mode === "nodule-polygon"
-            ? COLORS.nodule
-            : mode === "strap"
-            ? COLORS.region
-            : COLORS.parenchyma,
-        dataType:
-          mode === "nodule-polygon"
-            ? "nodule"
-            : mode === "strap"
-            ? "region"
-            : "parenchyma",
+        strokeColor: 
+          mode === 'nodule-polygon' ? COLORS.nodule :
+          mode === 'strap' ? COLORS.region :
+          COLORS.parenchyma,
+        dataType: 
+          mode === 'nodule-polygon' ? 'nodule' :
+          mode === 'strap' ? 'region' :
+          'parenchyma',
+          properties: null
       };
-      setShapes((prev) => [...prev, newShape]);
+      setCurrentNodule(newShape);
+      setPolygonPoints([]);
+      //setShapes(prev => [...prev, newShape]);
     }
     setPolygonPoints([]);
   };
@@ -150,13 +164,9 @@ const ImageWithShapes = () => {
         const img = new Image();
         img.src = event.target.result;
         img.onload = () => {
-          setImageInfo({
-            url: event.target.result,
-            suitableForUse: false, // Default to editable when new image loads
-          });
           setCanvasSize({
             width: img.naturalWidth,
-            height: img.naturalHeight,
+            height: img.naturalHeight
           });
           setImageUrl(event.target.result);
           setShapes([]);
@@ -176,7 +186,7 @@ const ImageWithShapes = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       setCanvasSize({
         width: rect.width,
-        height: rect.height,
+        height: rect.height
       });
     }
   };
@@ -185,9 +195,9 @@ const ImageWithShapes = () => {
   // and update it on window resize
   useEffect(() => {
     handleResize();
-    window.addEventListener("resize", handleResize);
+    window.addEventListener('resize', handleResize);
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener('resize', handleResize);
     };
   }, []);
   useEffect(() => {
@@ -215,23 +225,23 @@ const ImageWithShapes = () => {
   const saveAnnotations = () => {
     const annotationData = {
       imageUrl: imageUrl,
-      imageInfo: {
-        url: imageInfo.url,
-        suitableForUse: imageInfo.suitableForUse,
-      },
       imageDimensions: canvasSize,
-      shapes: shapes,
-      timestamp: new Date().toISOString(),
+      shapes: shapes.map(shape => ({
+        ...shape,
+        // Ensure properties are included in the saved data
+        properties: shape.properties || {}
+      })),
+      timestamp: new Date().toISOString()
     };
-
+    
     // Convert to JSON string
     const dataStr = JSON.stringify(annotationData);
-
+    
     // Save to localStorage (or you could send to a server)
-    localStorage.setItem("savedAnnotations", dataStr);
-
+    localStorage.setItem('savedAnnotations', dataStr);
+    
     // Optionally: Download as a file
-    /* const blob = new Blob([dataStr], { type: 'application/json' });
+   /* const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -240,294 +250,249 @@ const ImageWithShapes = () => {
     
     alert('Annotations saved successfully!');*/
   };
-
+  
   const loadAnnotations = () => {
     // Load from localStorage
-    const savedData = localStorage.getItem("savedAnnotations");
-
-    if (!savedData) {
-      alert("No saved annotations found!");
-      return;
-    }
-
+    const savedData = localStorage.getItem('savedAnnotations');
+    if (!savedData) return;
+  
     try {
       const annotationData = JSON.parse(savedData);
-
-      // Set the image first
       setImageUrl(annotationData.imageUrl);
-      setImageInfo(
-        annotationData.imageInfo || {
-          url: annotationData.imageUrl,
-          suitableForUse: false,
-        }
-      );
       setCanvasSize(annotationData.imageDimensions);
-
-      // Then set the shapes after a small delay to ensure canvas is ready
-      setTimeout(() => {
-        setShapes(annotationData.shapes);
-      }, 100);
-
-      alert("Annotations loaded successfully!");
+      
+      // Ensure all nodules have either properties object or null
+      setShapes(annotationData.shapes.map(shape => ({
+        ...shape,
+        properties: shape.properties || null
+      })));
+      
     } catch (error) {
-      console.error("Error loading annotations:", error);
-      alert("Failed to load annotations!");
+      console.error('Load error:', error);
     }
   };
-
+  
   const loadAnnotationsFromFile = (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
+    
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const annotationData = JSON.parse(e.target.result);
-
+        
         setImageUrl(annotationData.imageUrl);
         setCanvasSize(annotationData.imageDimensions);
-
+        
         setTimeout(() => {
           setShapes(annotationData.shapes);
         }, 100);
-
-        alert("Annotations loaded from file!");
+        
+        alert('Annotations loaded from file!');
       } catch (error) {
-        console.error("Error loading from file:", error);
-        alert("Invalid annotation file!");
+        console.error('Error loading from file:', error);
+        alert('Invalid annotation file!');
       }
     };
     reader.readAsText(file);
   };
   // sidebar for annotation types
-  // Calculate shape counts by type
-  const shapeCounts = shapes.reduce((acc, shape) => {
-    const type = shape.dataType || "unknown";
+   // Calculate shape counts by type
+   const shapeCounts = shapes.reduce((acc, shape) => {
+    const type = shape.dataType || 'unknown';
     acc[type] = (acc[type] || 0) + 1;
     return acc;
   }, {});
 
   // Group shapes by type for the sidebar
   const groupedShapes = shapes.reduce((acc, shape) => {
-    const type = shape.dataType || "unknown";
+    const type = shape.dataType || 'unknown';
     if (!acc[type]) {
       acc[type] = [];
     }
     acc[type].push(shape);
     return acc;
   }, {});
-  // Function to highlight a shape when clicked in the sidebar
-  const highlightShape = (shape) => {
-    // First remove any existing highlights
-    paper.project.activeLayer.children.forEach((item) => {
-      item.strokeColor = item.data.strokeColor; // Reset to original color
-    });
+// Function to highlight a shape when clicked in the sidebar
+// Modify highlightShape to handle selection
+const highlightShape = (shape) => {
+  // First remove any existing highlights
+  paper.project.activeLayer.children.forEach(item => {
+    item.strokeColor = item.data.strokeColor;
+    item.strokeWidth = 2;
+  });
 
-    // Find and highlight the selected shape
-    paper.project.activeLayer.children.forEach((item) => {
-      if (item.data.id === shape.id) {
-        item.strokeColor = "yellow";
-        item.strokeWidth = 3;
-        item.bringToFront();
-      }
-    });
-    paper.view.update();
+  // Find and highlight the selected shape
+  paper.project.activeLayer.children.forEach(item => {
+    if (item.data.id === shape.id) {
+      item.strokeColor = 'yellow';
+      item.strokeWidth = 3;
+      item.bringToFront();
+      setSelectedShape(shape);
+    }
+  });
+  paper.view.update();
+};
+// Add delete functionality
+const deleteSelectedShape = () => {
+  if (!selectedShape) return;
+  
+  setShapes(prev => prev.filter(shape => shape.id !== selectedShape.id));
+  setSelectedShape(null);
+};
+const saveNoduleProperties = (properties) => {
+  if (!currentNodule) return;
+  
+  const finalizedNodule = {
+    ...currentNodule,
+    properties: properties // Add the selected properties
   };
+  
+  // Add to shapes only once here
+  setShapes(prev => [...prev, finalizedNodule]);
+  setCurrentNodule(null);
+};
+
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <div className="sidebar">
-        <ShapeSidebar shapes={shapes} onHighlightShape={highlightShape} />
-      </div>
-      {/* Main content */}
-      <div className="main-content">
-        <h1>Image Annotation Tool</h1>
-        <div style={{ marginBottom: "20px" }}>
-          <div style={{ marginBottom: "10px" }}>
-            <strong>Nodule Annotations:</strong>
-            <Button
-              type={mode === "circle" ? "primary" : "default"}
-              onClick={() => setMode("circle")}
-              disabled={imageInfo.suitableForUse}
-              style={{ marginRight: 8 }}
-            >
-              Draw Nodule (Circle)
-            </Button>
-            <Button
-              onClick={() => setMode("nodule-polygon")}
-              style={{
-                fontWeight: mode === "nodule-polygon" ? "bold" : "normal",
-                color: COLORS.nodule,
-              }}
-              disabled={toolsDisabled}
-            >
-              Polygon
-            </Button>
-          </div>
+    {/* Sidebar */}
+    <ShapeSidebar 
 
-          <div style={{ marginBottom: "10px" }}>
-            <strong>Region Annotations:</strong>
-            <Button
-              onClick={() => setMode("strap")}
-              style={{
-                margin: "0 10px",
-                fontWeight: mode === "strap" ? "bold" : "normal",
-                color: COLORS.region,
-              }}
-              disabled={toolsDisabled}
-            >
-              Strap Kasi
-            </Button>
-            <Button
-              onClick={() => setMode("parenchyma")}
-              style={{
-                fontWeight: mode === "parenchyma" ? "bold" : "normal",
-                color: COLORS.parenchyma,
-              }}
-              disabled={toolsDisabled}
-            >
-              Zemin Parenkim
-            </Button>
-          </div>
+shapes={shapes} 
 
-          {(mode === "nodule-polygon" ||
-            mode === "strap" ||
-            mode === "parenchyma") && (
-            <div style={{ marginTop: "10px" }}>
-              <Button
-                onClick={finishPolygon}
-                style={{ marginRight: "10px" }}
-                disabled={toolsDisabled}
-              >
-                Finish{" "}
-                {mode === "nodule-polygon"
-                  ? "Nodule"
-                  : mode === "strap"
-                  ? "Region"
-                  : "Parenchyma"}
-              </Button>
-              <Button
-                onClick={() => setPolygonPoints([])}
-                style={{ marginRight: "10px" }}
-                disabled={toolsDisabled}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
+onHighlightShape={highlightShape} 
 
-          <div style={{ marginTop: "10px" }}>
-            <Button
-              onClick={clearAll}
-              style={{ marginRight: "10px" }}
-              disabled={toolsDisabled}
-            >
-              Clear All
-            </Button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-              accept="image/*"
-              style={{ display: "none" }}
-            />
-            <Button
-              onClick={() => fileInputRef.current.click()}
-              disabled={toolsDisabled}
-            >
-              Upload Image
-            </Button>
-          </div>
-          <div style={{ marginTop: "10px" }}>
-            <Button
-              onClick={saveAnnotations}
-              style={{ marginRight: "10px" }}
-              disabled={toolsDisabled}
-            >
-              Save Annotations
-            </Button>
-            <Button
-              onClick={loadAnnotations}
-              style={{ marginRight: "10px" }}
-              disabled={toolsDisabled}
-            >
-              Load Annotations
-            </Button>
-            <input
-              type="file"
-              id="annotationFile"
-              accept=".json"
-              onChange={loadAnnotationsFromFile}
-              style={{ display: "none" }}
-            />
-            <Button
-              disabled={toolsDisabled}
-              onClick={() => document.getElementById("annotationFile").click()}
-            >
-              Load From File
-            </Button>
-          </div>
-          <div
-            style={{
-              marginLeft: "20px",
-              display: "flex",
-              alignItems: "center",
+/>
+
+    {/* Main content */}
+    <div className="main-content">
+      <h1>Image Annotation Tool</h1>
+      <div style={{ marginBottom: '20px' }}>
+      {currentNodule && (
+  <NodulePropertiesPanel
+    shape={currentNodule}
+    onSave={saveNoduleProperties}
+    onCancel={() => setCurrentNodule(null)}
+  />
+)}
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Nodule Annotations:</strong>
+          <button 
+            onClick={() => setMode('circle')} 
+            style={{ 
+              margin: '0 10px',
+              fontWeight: mode === 'circle' ? 'bold' : 'normal',
+              color: COLORS.nodule
             }}
           >
-            <span style={{ marginRight: "8px" }}>Edit Mode:</span>
-
-            <Switch
-              checked={imageInfo.suitableForUse}
-              onChange={(checked) =>
-                setImageInfo((prev) => ({
-                  ...prev,
-
-                  suitableForUse: checked,
-                }))
-              }
-              checkedChildren="Locked"
-              unCheckedChildren="Editable"
-            />
-
-            <span
-              style={{
-                marginLeft: "8px",
-                color: imageInfo.suitableForUse ? "#ff4d4f" : "#52c41a",
-              }}
-            >
-              {imageInfo.suitableForUse
-                ? "Editing disabled"
-                : "Editing enabled"}
-            </span>
-          </div>
+            Circle
+          </button>
+          <button 
+            onClick={() => setMode('nodule-polygon')} 
+            style={{ 
+              fontWeight: mode === 'nodule-polygon' ? 'bold' : 'normal',
+              color: COLORS.nodule
+            }}
+          >
+            Nodule Polygon
+          </button>
         </div>
 
-        <div style={{ position: "relative", border: "1px solid #ccc" }}>
-          {imageUrl && (
-            <img
-              src={imageUrl}
-              alt="Annotation base"
-              style={{ display: "block", maxWidth: "100%" }}
-            />
-          )}
-          <canvas
-            ref={canvasRef}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              cursor: imageInfo.suitableForUse ? 'not-allowed' : 'crosshair',
-              pointerEvents: imageInfo.suitableForUse ? 'none' : 'auto'
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Region Annotations:</strong>
+          <button 
+            onClick={() => setMode('strap')} 
+            style={{ 
+              margin: '0 10px',
+              fontWeight: mode === 'strap' ? 'bold' : 'normal',
+              color: COLORS.region
             }}
+          >
+            Strap Kasi
+          </button>
+          <button 
+            onClick={() => setMode('parenchyma')} 
+            style={{ 
+              fontWeight: mode === 'parenchyma' ? 'bold' : 'normal',
+              color: COLORS.parenchyma
+            }}
+          >
+            Zemin Parenkim
+          </button>
+        </div>
+
+        {(mode === 'nodule-polygon' || mode === 'strap' || mode === 'parenchyma') && (
+          <div style={{ marginTop: '10px' }}>
+            <button onClick={finishPolygon} style={{ marginRight: '10px' }}>
+              Finish Drawing
+            </button>
+            <button onClick={() => setPolygonPoints([])}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        <div style={{ marginTop: '10px' }}>
+          <button onClick={clearAll} style={{ marginRight: '10px' }}>
+            Clear All
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageUpload}
+            accept="image/*"
+            style={{ display: 'none' }}
           />
+          <button onClick={() => fileInputRef.current.click()}>
+            Upload Image
+          </button>
+        </div>
+        <div style={{ marginTop: '10px' }}>
+          <button onClick={saveAnnotations} style={{ marginRight: '10px' }}>
+            Save Annotations
+          </button>
+          <button onClick={loadAnnotations} style={{ marginRight: '10px' }}>
+            Load Annotations
+          </button>
+          <input
+            type="file"
+            id="annotationFile"
+            accept=".json"
+            onChange={loadAnnotationsFromFile}
+            style={{ display: 'none' }}
+          />
+          <button onClick={() => document.getElementById('annotationFile').click()}>
+            Load From File
+          </button>
         </div>
       </div>
+
+
+      <div style={{ position: 'relative', border: '1px solid #ccc' }}>
+        {imageUrl && (
+          <img
+            src={imageUrl}
+            alt="Annotation base"
+            style={{ display: 'block', maxWidth: '100%' }}
+          />
+        )}
+        <canvas
+          ref={canvasRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            cursor: 'crosshair'
+          }}
+        />
+      </div>
+    </div>
     </div>
   );
 };
 
-export default ImageWithShapes;
+export default ImageWithShapes; 

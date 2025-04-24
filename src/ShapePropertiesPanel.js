@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 const ShapePropertiesPanel = ({ shapeType, properties, onSave, onCancel }) => {
+    console.log('Shape Type:', shapeType);
+    console.log('Properties:', properties);
     const PROPERTY_OPTIONS = {
         nodule: {
           composition: ['Cystic', 'Spongiform', 'Mixed', 'Solid', 'Other'],

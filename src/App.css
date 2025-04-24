@@ -128,3 +128,23 @@ canvas {
 .property-value {
   color: #666;
 }
+/* Add to your styles */
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+}
+
+.properties-sidebar {
+  width: 300px;
+  padding: 16px;
+  background: #fafafa;
+  border-left: 1px solid #e8e8e8;
+  height: 100vh;
+  overflow-y: auto;
+}

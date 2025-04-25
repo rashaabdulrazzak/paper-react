@@ -5,6 +5,7 @@ import NodulePropertiesPanel from "./NodulePropertiesPanel";
 
 import PropertiesSidebar from "./PropertiesSidebar";
 //import ShapePropertiesPanel from "./ShapePropertiesPanel";
+import { message } from "antd";
 
 const ImageWithShapes = () => {
   const [mode, setMode] = useState(null);
@@ -13,6 +14,9 @@ const ImageWithShapes = () => {
     "https://letsenhance.io/static/73136da51c245e80edc6ccfe44888a99/1015f/MainBefore.jpg"
   );
   const [shapes, setShapes] = useState([]);
+
+const [tempShape, setTempShape] = useState(null); // For shapes being drawn
+
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -81,7 +85,22 @@ const [shapeProperties, setShapeProperties] = useState({
           };
           setShapes((prev) => [...prev, newShape]);
         } else if (mode && mode !== "circle") {
-          setPolygonPoints((prev) => [...prev, [event.point.x, event.point.y]]);
+          if (polygonPoints.length === 0) {
+            // Initialize temp shape when starting to draw
+            setTempShape({
+              id: Date.now().toString(36),
+              type: 'polygon',
+              points: [[event.point.x, event.point.y]],
+              strokeColor: 
+                mode === 'nodule-polygon' ? COLORS.nodule :
+                mode === 'parenchyma' ? COLORS.parenchyma :
+                COLORS.region,
+              dataType: mode,
+              properties: null
+            });
+          }
+          setPolygonPoints(prev => [...prev, [event.point.x, event.point.y]]);
+        
         }
       };
 
@@ -108,112 +127,90 @@ const [shapeProperties, setShapeProperties] = useState({
 
   const redrawShapes = () => {
     if (!paper.project) return;
-
-    // Clear only the active layer, keeping other layers intact
+    
     paper.project.activeLayer.removeChildren();
-
-    // Draw all completed shapes
-    shapes.forEach((shape) => {
-      if (shape.type === "circle") {
-        new paper.Path.Circle({
-          center: new paper.Point(shape.center[0], shape.center[1]),
-          radius: shape.radius,
-          strokeColor: shape.strokeColor,
-          strokeWidth: 2,
-        }).data = {
-          id: shape.id,
-          strokeColor: shape.strokeColor,
-        };
-      } else if (shape.type === "polygon") {
+    
+    // Draw completed shapes
+    shapes.forEach(shape => {
+      if (shape.type === 'circle') {
+        // ... circle drawing
+      } else if (shape.type === 'polygon') {
         new paper.Path({
           segments: shape.points,
           strokeColor: shape.strokeColor,
           strokeWidth: 2,
-          closed: true,
-        }).data = {
-          id: shape.id,
-          strokeColor: shape.strokeColor,
-        };
+          closed: true
+        }).data = { id: shape.id };
       }
     });
-
-    // Draw the current in-progress polygon
-    if (polygonPoints.length > 0) {
-      const color =
-        mode === "nodule-polygon"
-          ? COLORS.nodule
-          : mode === "strap"
-          ? COLORS.region
-          : COLORS.parenchyma;
-
+  
+    // Draw temporary polygon (in-progress drawing)
+    if (polygonPoints.length > 0 && tempShape) {
       new paper.Path({
         segments: polygonPoints,
-        strokeColor: color,
+        strokeColor: tempShape.strokeColor,
         strokeWidth: 2,
         dashArray: [5, 5],
-        closed: polygonPoints.length > 2,
+        closed: polygonPoints.length > 2
       });
     }
-
+    
     paper.view.update();
   };
 
   const finishPolygon = () => {
-    if (polygonPoints.length >= 3) {
-      const newShape = {
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-        type: "polygon",
-        points: polygonPoints,
-        strokeColor:
-          mode === "nodule-polygon"
-            ? COLORS.nodule
-            : mode === "parenchyma"
-            ? COLORS.parenchyma
-            : COLORS.region,
-        dataType: mode,
-        properties: mode === "strap" ? undefined : null, // No properties for Strap Kasi
+    // Check if we have enough points and a temporary shape
+    if (polygonPoints.length >= 3 && tempShape) {
+      // Create the finalized shape object
+      const finalizedShape = {
+        ...tempShape,
+        points: [...polygonPoints], // Copy the points array
+        properties: {
+          // Spread the existing properties for this shape type
+          ...shapeProperties[tempShape.dataType]
+        },
+        createdAt: new Date().toISOString()
       };
-      // Only show properties panel for nodule and parenchyma
-      if (mode === "nodule-polygon" || mode === "parenchyma") {
-        setCurrentShape(newShape);
-        // Initialize properties based on shape type
-        setShapeProperties(
-          mode === "nodule-polygon"
-            ? {
-                composition: "",
-                echogenicity: "",
-                shape: "",
-                margin: "",
-                echogenicFoci: "",
-              }
-            : {
-                heterojenitesi: "",
-              }
-        );
-        // sidebar for properties
-        setActiveShapeForProperties(newShape);
-        setCurrentNodule(newShape);
-      } else {
-        // For Strap Kasi, add directly to shapes with no properties
-        setShapes((prev) => [...prev, newShape]);
-      }
-
+  
+      // Add the finalized shape to our shapes array
+      setShapes(prev => [...prev, finalizedShape]);
+  
+      // Clear the temporary drawing state
       setPolygonPoints([]);
-
-      // Initialize properties based on shape type
-      if (mode === "nodule-polygon") {
-        setShapeProperties({
-          composition: "",
-          echogenicity: "",
-          shape: "",
-          margin: "",
-          echogenicFoci: "",
-        });
-      } else if (mode === "parenchyma") {
-        setShapeProperties({
-          heterojenitesi: "",
-        });
-      }
+      setTempShape(null);
+  
+      // Update Paper.js to show the new permanent shape
+      redrawShapes();
+  
+      // Highlight the newly created shape
+      highlightShape(finalizedShape);
+  
+      // For Strap Kasi (no properties), we're done here
+      if (tempShape.dataType === 'strap') return;
+  
+      // For other shapes, prepare the properties sidebar
+      setSelectedShape(finalizedShape);
+      setShapeProperties(prev => ({
+        ...prev,
+        [tempShape.dataType]: {
+          // Reset properties for new shapes of this type
+          ...(tempShape.dataType === 'nodule-polygon' ? {
+            composition: '',
+            echogenicity: '',
+            shape: '',
+            margin: '',
+            echogenicFoci: ''
+          } : {
+            heterojenitesi: ''
+          })
+        }
+      }));
+  
+      // Show success feedback
+      message.success(`${tempShape.dataType === 'nodule-polygon' ? 'Nodule' : 'Parenchyma'} created successfully!`);
+    } else {
+      // Show error if trying to finish without valid shape
+      message.error('Cannot finish - not enough points drawn');
     }
   };
 
@@ -377,34 +374,37 @@ const [shapeProperties, setShapeProperties] = useState({
   }, {});
   // Function to highlight a shape when clicked in the sidebar
   // Modify highlightShape to handle selection
-  const highlightShape = (shape) => {
-    // First remove any existing highlights
+ 
+   // Highlight the shape visually
+   const highlightShape = (shape) => {
+    // Clear all highlights first
     paper.project.activeLayer.children.forEach(item => {
-      item.strokeColor = item.data.strokeColor;
-      item.strokeWidth = 2;
+      if (item.data.id) {
+        item.strokeColor = shapes.find(s => s.id === item.data.id)?.strokeColor || item.data.strokeColor;
+        item.strokeWidth = 2;
+      }
     });
   
     // Find and highlight the selected shape
-    paper.project.activeLayer.children.forEach(item => {
-      if (item.data.id === shape.id) {
-        item.strokeColor = 'yellow';
-        item.strokeWidth = 3;
-        item.bringToFront();
-        setSelectedShape(shape);
-        
-        // Initialize properties if they don't exist
-        if (shape.properties === undefined && shape.dataType === 'strap') {
-          return; // No properties for Strap Kasi
-        }
-        
-        if (shape.properties) {
-          setShapeProperties(prev => ({
-            ...prev,
-            [shape.dataType]: shape.properties
-          }));
-        }
-      }
-    });
+    const itemToHighlight = paper.project.activeLayer.children.find(item => 
+      item.data.id === shape.id
+    );
+    
+    if (itemToHighlight) {
+      itemToHighlight.strokeColor = 'yellow';
+      itemToHighlight.strokeWidth = 3;
+      itemToHighlight.bringToFront();
+    }
+  
+    // Update selected shape and properties
+    setSelectedShape(shape);
+    if (shape.properties) {
+      setShapeProperties(prev => ({
+        ...prev,
+        [shape.dataType]: shape.properties
+      }));
+    }
+  
     paper.view.update();
   };
   // Add delete functionality
@@ -444,7 +444,7 @@ const [shapeProperties, setShapeProperties] = useState({
       <ShapeSidebar shapes={shapes} onHighlightShape={highlightShape} />
 
       {/* Main content */}
-      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+      <div style={{ flex: 1, overflow: 'auto',padding: '20px'  }}>
         <h1>Image Annotation Tool</h1>
         <div style={{ marginBottom: "20px" }}>
           
@@ -567,22 +567,40 @@ const [shapeProperties, setShapeProperties] = useState({
      
         </div>
         </div>
+        {/* Right Sidebar */}
+        
         <PropertiesSidebar
-      shape={activeShapeForProperties}
+      shape={selectedShape || tempShape}
       properties={shapeProperties}
-      onPropertiesChange={(key, value) => {
-        setShapeProperties(prev => ({ ...prev, [key]: value }));
+      onPropertiesChange={(property, value) => {
+        const shapeType = (selectedShape || tempShape)?.dataType;
+        if (shapeType) {
+          setShapeProperties(prev => ({
+            ...prev,
+            [shapeType]: {
+              ...prev[shapeType],
+              [property]: value
+            }
+          }));
+        }
       }}
       onSave={() => {
-        const finalizedShape = {
-          ...activeShapeForProperties,
-          properties: shapeProperties
-        };
-        setShapes(prev => [...prev, finalizedShape]);
-        setActiveShapeForProperties(null);
-      }}
-      onCancel={() => {
-        setActiveShapeForProperties(null);
+        const activeShape = selectedShape || tempShape;
+        if (!activeShape) return;
+
+        if (selectedShape) {
+          // Update existing shape
+          setShapes(prev => 
+            prev.map(shape => 
+              shape.id === selectedShape.id 
+                ? { ...shape, properties: shapeProperties[shape.dataType] }
+                : shape
+            )
+          );
+        } else if (tempShape) {
+          // Save new shape
+          finishPolygon();
+        }
       }}
     />
       

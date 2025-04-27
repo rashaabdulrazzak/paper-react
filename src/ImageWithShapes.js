@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import paper from "paper";
 import ShapeSidebar from "./ShapeSidebar";
 import NodulePropertiesPanel from "./NodulePropertiesPanel";
@@ -47,7 +47,7 @@ const [shapeProperties, setShapeProperties] = useState({
     region: "blue",
     parenchyma: "purple",
   };
-
+  const [editingShape, setEditingShape] = useState(null);
   useEffect(
     () => {
       if (!canvasRef.current || !imageUrl) return;
@@ -71,6 +71,21 @@ const [shapeProperties, setShapeProperties] = useState({
 
         paper.view.zoom = Math.min(Math.max(newZoom, 0.1), 10); // Limit zoom range
       };
+      // Add this new handler for polygon drawing preview
+  paper.view.onMouseMove = (event) => {
+    if (polygonPoints.length > 0) {
+      // Show preview of the current polygon
+      redrawShapes(); // Redraws existing shapes + temporary polygon
+      new paper.Path({
+        segments: [...polygonPoints, [event.point.x, event.point.y]],
+        strokeColor: tempShape?.strokeColor || 'black',
+        strokeWidth: 1,
+        dashArray: [4, 4],
+        closed: false
+      });
+      paper.view.update();
+    }
+  };
       redrawShapes(); // Draw existing shapes immediately after setup
 
       const handleMouseDown = (event) => {
@@ -125,92 +140,76 @@ const [shapeProperties, setShapeProperties] = useState({
     }
   }, [shapes, polygonPoints]);
 
-  const redrawShapes = () => {
+  const redrawShapes = useCallback(() => {
     if (!paper.project) return;
-    
-    paper.project.activeLayer.removeChildren();
-    
-    // Draw completed shapes
-    shapes.forEach(shape => {
-      if (shape.type === 'circle') {
-        // ... circle drawing
-      } else if (shape.type === 'polygon') {
-        new paper.Path({
-          segments: shape.points,
-          strokeColor: shape.strokeColor,
-          strokeWidth: 2,
-          closed: true
-        }).data = { id: shape.id };
-      }
-    });
   
-    // Draw temporary polygon (in-progress drawing)
-    if (polygonPoints.length > 0 && tempShape) {
-      new paper.Path({
-        segments: polygonPoints,
-        strokeColor: tempShape.strokeColor,
-        strokeWidth: 2,
-        dashArray: [5, 5],
-        closed: polygonPoints.length > 2
-      });
-    }
-    
+    paper.project.activeLayer.removeChildren(); // Clear canvas
+  
+    // Draw finalized shapes only
+    shapes.forEach(shape => {
+      const isSelected = selectedShape?.id === shape.id;
+      const path = shape.type === 'circle' 
+        ? new paper.Path.Circle({
+            center: new paper.Point(shape.center[0], shape.center[1]),
+            radius: shape.radius
+          })
+        : new paper.Path({
+            segments: shape.points,
+            closed: true
+          });
+  
+      path.strokeColor = isSelected ? 'yellow' : shape.strokeColor;
+      path.strokeWidth = isSelected ? 3 : 2;
+      path.data = { id: shape.id, strokeColor: shape.strokeColor };
+    });
+    // Draw temporary polygon (committed points)
+  if (polygonPoints.length > 0) {
+    new paper.Path({
+      segments: polygonPoints,
+      strokeColor: tempShape?.strokeColor || 'black',
+      strokeWidth: 2,
+      closed: false // Don't close until finished
+    });
+  }
+  
     paper.view.update();
-  };
+  }, [shapes, polygonPoints, selectedShape, tempShape]);
 
   const finishPolygon = () => {
-    // Check if we have enough points and a temporary shape
     if (polygonPoints.length >= 3 && tempShape) {
-      // Create the finalized shape object
       const finalizedShape = {
         ...tempShape,
-        points: [...polygonPoints], // Copy the points array
-        properties: {
-          // Spread the existing properties for this shape type
-          ...shapeProperties[tempShape.dataType]
-        },
-        createdAt: new Date().toISOString()
+        points: [...polygonPoints],
+        properties: shapeProperties[tempShape.dataType] || {}
       };
   
-      // Add the finalized shape to our shapes array
       setShapes(prev => [...prev, finalizedShape]);
-  
-      // Clear the temporary drawing state
       setPolygonPoints([]);
       setTempShape(null);
-  
-      // Update Paper.js to show the new permanent shape
-      redrawShapes();
-  
-      // Highlight the newly created shape
+      
+      // Keep the shape selected (remove the setTimeout)
       highlightShape(finalizedShape);
-  
-      // For Strap Kasi (no properties), we're done here
-      if (tempShape.dataType === 'strap') return;
-  
-      // For other shapes, prepare the properties sidebar
-      setSelectedShape(finalizedShape);
-      setShapeProperties(prev => ({
-        ...prev,
-        [tempShape.dataType]: {
-          // Reset properties for new shapes of this type
-          ...(tempShape.dataType === 'nodule-polygon' ? {
+      
+      // Reset properties for next shape
+      if (finalizedShape.dataType === 'nodule-polygon') {
+        setShapeProperties(prev => ({
+          ...prev,
+          'nodule-polygon': {
             composition: '',
             echogenicity: '',
             shape: '',
             margin: '',
             echogenicFoci: ''
-          } : {
+          }
+        }));
+      } else if (finalizedShape.dataType === 'parenchyma') {
+        setShapeProperties(prev => ({
+          ...prev,
+          'parenchyma': {
             heterojenitesi: ''
-          })
-        }
-      }));
-  
-      // Show success feedback
-      message.success(`${tempShape.dataType === 'nodule-polygon' ? 'Nodule' : 'Parenchyma'} created successfully!`);
-    } else {
-      // Show error if trying to finish without valid shape
-      message.error('Cannot finish - not enough points drawn');
+          }
+        }));
+      }
     }
   };
 
@@ -398,6 +397,15 @@ const [shapeProperties, setShapeProperties] = useState({
   
     // Update selected shape and properties
     setSelectedShape(shape);
+     // Pulse animation for new shapes
+  if (shape.justCreated) {
+    const path = paper.project.getItem({ data: { id: shape.id } });
+    path.tween(
+      { strokeWidth: 5 },
+      { strokeWidth: 2 },
+      { duration: 1000 }
+    );
+  }
     if (shape.properties) {
       setShapeProperties(prev => ({
         ...prev,
@@ -438,6 +446,110 @@ const [shapeProperties, setShapeProperties] = useState({
     setCurrentShape(null);
     setShapeProperties({});
   };
+  /* too see what functionality to add 
+  const handleShapeClick = (shape) => {
+    if (editingShape) {
+      setEditingShape(null);
+    } else {
+      setEditingShape(shape);
+      setSelectedShape(shape);
+      highlightShape(shape);
+    }
+  };
+  const handleShapeMouseOver = (shape) => {
+    if (editingShape) {
+      setEditingShape(shape);
+    }
+  };
+  const handleShapeMouseOut = () => {
+    if (editingShape) {
+      setEditingShape(null);
+    }
+  };
+  const handleShapeSelect = (shape) => {
+    setSelectedShape(shape);
+    highlightShape(shape);
+  };
+  const handleShapeDeselect = () => {
+    setSelectedShape(null);
+  };
+  const handleShapeEdit = (shape) => {
+    setEditingShape(shape);
+    setSelectedShape(shape);
+  };
+  const handleShapeDelete = (shape) => {
+    setShapes((prev) => prev.filter((s) => s.id !== shape.id));
+    setSelectedShape(null);
+  };
+  const handleShapePropertiesChange = (property, value) => {
+    if (selectedShape) {
+      setShapeProperties((prev) => ({
+        ...prev,
+        [selectedShape.dataType]: {
+          ...prev[selectedShape.dataType],
+          [property]: value,
+        },
+      }));
+    }
+  };
+  const handleShapeSave = () => {
+    if (selectedShape) {
+      const updatedShapes = shapes.map((s) =>
+        s.id === selectedShape.id
+          ? { ...s, properties: shapeProperties[selectedShape.dataType] }
+          : s
+      );
+      setShapes(updatedShapes);
+      message.success("Properties updated successfully!");
+    }
+  };
+  const handleShapeCancel = () => {
+    setEditingShape(null);
+    setSelectedShape(null);
+  };
+  const handleShapePropertiesSave = () => {
+    if (selectedShape) {
+      const updatedShapes = shapes.map((s) =>
+        s.id === selectedShape.id
+          ? { ...s, properties: shapeProperties[selectedShape.dataType] }
+          : s
+      );
+      setShapes(updatedShapes);
+      message.success("Properties updated successfully!");
+    }
+  };
+  const handleShapePropertiesCancel = () => {
+    setEditingShape(null);
+    setSelectedShape(null);
+  };
+  const handleShapePropertiesDelete = () => {
+    if (selectedShape) {
+      setShapes((prev) => prev.filter((s) => s.id !== selectedShape.id));
+      setSelectedShape(null);
+    }
+  };
+  const startEditingShape = (shape) => {
+    setEditingShape(shape);
+    setMode(shape.dataType);
+    setPolygonPoints(shape.points || []);
+  };
+  const saveEditedShape = () => {
+    if (editingShape && polygonPoints.length >= 3) {
+      setShapes(shapes.map(s => 
+        s.id === editingShape.id 
+          ? { ...s, points: [...polygonPoints] } 
+          : s
+      ));
+      cancelEditing();
+    }
+  };
+  const cancelEditing = () => {
+    setEditingShape(null);
+    setPolygonPoints([]);
+    setMode(null);
+  };
+  */
+  
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       {/* Left Sidebar */}
@@ -570,39 +682,36 @@ const [shapeProperties, setShapeProperties] = useState({
         {/* Right Sidebar */}
         
         <PropertiesSidebar
-      shape={selectedShape || tempShape}
+      shape={selectedShape}
       properties={shapeProperties}
       onPropertiesChange={(property, value) => {
-        const shapeType = (selectedShape || tempShape)?.dataType;
-        if (shapeType) {
+        if (selectedShape) {
           setShapeProperties(prev => ({
             ...prev,
-            [shapeType]: {
-              ...prev[shapeType],
+            [selectedShape.dataType]: {
+              ...prev[selectedShape.dataType],
               [property]: value
             }
           }));
         }
       }}
       onSave={() => {
-        const activeShape = selectedShape || tempShape;
-        if (!activeShape) return;
-
         if (selectedShape) {
-          // Update existing shape
-          setShapes(prev => 
-            prev.map(shape => 
-              shape.id === selectedShape.id 
-                ? { ...shape, properties: shapeProperties[shape.dataType] }
-                : shape
-            )
+          const updatedShapes = shapes.map(s => 
+            s.id === selectedShape.id 
+              ? { 
+                  ...s, 
+                  properties: shapeProperties[selectedShape.dataType] 
+                } 
+              : s
           );
-        } else if (tempShape) {
-          // Save new shape
-          finishPolygon();
+          setShapes(updatedShapes);
+          message.success('Properties updated successfully!');
+          setSelectedShape(null); 
         }
       }}
     />
+
       
     </div>
   );

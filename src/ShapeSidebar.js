@@ -155,6 +155,7 @@ const ShapeSidebar = ({ shapes, onHighlightShape }) => {
               // In the List.Item render section:
               renderItem={(shape, index) => (
                 <List.Item
+                id={`shape-${shape.id}`}
                   onClick={() => onHighlightShape(shape)}
                   style={{
                     padding: "8px 12px",

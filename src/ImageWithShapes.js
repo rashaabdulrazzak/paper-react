@@ -32,7 +32,10 @@ const [shapeProperties, setShapeProperties] = useState({
     echogenicity: '',
     shape: '',
     margin: '',
-    echogenicFoci: ''
+    echogenicFoci: '',
+    measured: false,         
+    needleInNodule: false,   
+    notSuitableForUse: false
   },
   'parenchyma': {
     heterojenitesi: ''
@@ -159,7 +162,7 @@ const [shapeProperties, setShapeProperties] = useState({
           });
   
       path.strokeColor = isSelected ? 'yellow' : shape.strokeColor;
-      path.strokeWidth = isSelected ? 3 : 2;
+      path.strokeWidth = isSelected ? 3 : shape.properties ? 2 : 1;
       path.data = { id: shape.id, strokeColor: shape.strokeColor };
     });
     // Draw temporary polygon (committed points)
@@ -180,7 +183,11 @@ const [shapeProperties, setShapeProperties] = useState({
       const finalizedShape = {
         ...tempShape,
         points: [...polygonPoints],
-        properties: shapeProperties[tempShape.dataType] || {}
+        properties: {
+          // Initialize ALL properties including checkboxes
+          ...shapeProperties[tempShape.dataType],
+          ...tempShape.properties
+        }
       };
   
       setShapes(prev => [...prev, finalizedShape]);
@@ -397,6 +404,15 @@ const [shapeProperties, setShapeProperties] = useState({
   
     // Update selected shape and properties
     setSelectedShape(shape);
+    // Update shapeProperties with ALL properties including checkboxes
+  setShapeProperties(prev => ({
+    ...prev,
+    [shape.dataType]: {
+      ...prev[shape.dataType],
+      ...shape.properties // This includes checkbox values
+    }
+  }));
+
      // Pulse animation for new shapes
   if (shape.justCreated) {
     const path = paper.project.getItem({ data: { id: shape.id } });
@@ -685,29 +701,49 @@ const [shapeProperties, setShapeProperties] = useState({
       shape={selectedShape}
       properties={shapeProperties}
       onPropertiesChange={(property, value) => {
-        if (selectedShape) {
-          setShapeProperties(prev => ({
-            ...prev,
-            [selectedShape.dataType]: {
-              ...prev[selectedShape.dataType],
-              [property]: value
-            }
-          }));
-        }
-      }}
-      onSave={() => {
-        if (selectedShape) {
+        // Force immediate state update for checkboxes
+        setShapeProperties(prev => ({
+          ...prev,
+          [selectedShape.dataType]: {
+            ...prev[selectedShape.dataType],
+            [property]: value
+          }
+        }));
+        
+        // Auto-save checkbox changes immediately
+        if (['measured', 'needleInNodule', 'notSuitableForUse'].includes(property)) {
           const updatedShapes = shapes.map(s => 
             s.id === selectedShape.id 
               ? { 
                   ...s, 
-                  properties: shapeProperties[selectedShape.dataType] 
+                  properties: {
+                    ...s.properties,
+                    [property]: value
+                  }
                 } 
               : s
           );
           setShapes(updatedShapes);
-          message.success('Properties updated successfully!');
-          setSelectedShape(null); 
+        }
+      }}
+      onSave={() => {
+        if (selectedShape) {
+          // Get ALL current properties (including any unsaved checkbox changes)
+          const currentProps = {
+            ...selectedShape.properties,
+            ...shapeProperties[selectedShape.dataType]
+          };
+          
+          const updatedShapes = shapes.map(s => 
+            s.id === selectedShape.id 
+              ? { ...s, properties: currentProps } 
+              : s
+          );
+          
+          setShapes(updatedShapes);
+          message.success('All properties saved!');
+          setSelectedShape(null); // Deselect after saving
+         
         }
       }}
     />

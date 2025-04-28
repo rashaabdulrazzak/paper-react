@@ -55,12 +55,34 @@ const saveButtonStyle = {
   borderRadius: '4px',
   marginTop: '16px'
 };
+// In your styles.js or inline:
+const checkboxStyle = {
+  marginRight: '8px',
+  accentColor: '#1890ff' // Ant Design primary color
+};
+
+const propertiesContainerStyle = {
+  marginTop: '8px',
+  padding: '8px',
+  background: '#f5f5f5',
+  borderRadius: '4px'
+};
+
+const propertyItemStyle = {
+  display: 'flex',
+  fontSize: '12px',
+  marginBottom: '4px',
+  lineHeight: '1.4'
+};
 export  {
   sidebarStyle,
   propertyFieldStyle,
   selectStyle,
   buttonGroupStyle,
   saveButtonStyle,
-  typeConfig
+  typeConfig,
+  checkboxStyle,
+  propertiesContainerStyle,
+  propertyItemStyle
 };
    

@@ -155,7 +155,7 @@ const ShapeSidebar = ({ shapes, onHighlightShape }) => {
               // In the List.Item render section:
               renderItem={(shape, index) => (
                 <List.Item
-                id={`shape-${shape.id}`}
+                  id={`shape-${shape.id}`}
                   onClick={() => onHighlightShape(shape)}
                   style={{
                     padding: "8px 12px",
@@ -210,34 +210,100 @@ const ShapeSidebar = ({ shapes, onHighlightShape }) => {
                   </div>
 
                   {/* Properties display */}
-                 
-{shape.properties !== undefined && (
-  <div style={{ 
-    marginTop: '8px',
-    padding: '8px',
-    background: '#f5f5f5',
-    borderRadius: '4px'
-  }}>
-    {Object.entries(shape.properties).map(([key, value]) => (
-      <div key={key} style={{ 
-        display: 'flex',
-        fontSize: '12px',
-        marginBottom: '4px',
-        lineHeight: '1.4'
-      }}>
-        <span style={{ 
-          fontWeight: '500',
-          minWidth: '100px',
-          color: '#666'
-        }}>
-          {key === 'heterojenitesi' ? 'Heterojenite' : 
-           key.charAt(0).toUpperCase() + key.slice(1)}:
-        </span>
-        <span style={{ color: '#222' }}>{value}</span>
-      </div>
-    ))}
-  </div>
-)}
+
+                  {shape.properties && (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "8px",
+                        background: "#f5f5f5",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {/* Existing dropdown properties */}
+                      {Object.entries(shape.properties)
+                        .filter(
+                          ([key]) =>
+                            ![
+                              "measured",
+                              "needleInNodule",
+                              "notSuitableForUse",
+                            ].includes(key)
+                        )
+                        .map(([key, value]) => (
+                          <div
+                            key={key}
+                            style={{
+                              display: "flex",
+                              fontSize: "12px",
+                              marginBottom: "4px",
+                              lineHeight: "1.4",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: "500",
+                                minWidth: "100px",
+                                color: "#666",
+                              }}
+                            >
+                              {key === "heterojenitesi"
+                                ? "Heterojenite"
+                                : key.charAt(0).toUpperCase() + key.slice(1)}
+                              :
+                            </span>
+                            <span style={{ color: "#222" }}>{value}</span>
+                          </div>
+                        ))}
+
+                      {/* New checkbox properties */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        {shape.properties.measured && (
+                          <div
+                            style={{
+                              background: "#e6f7ff",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontSize: "12px",
+                            }}
+                          >
+                            ✓ Measured
+                          </div>
+                        )}
+                        {shape.properties.needleInNodule && (
+                          <div
+                            style={{
+                              background: "#fff7e6",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontSize: "12px",
+                            }}
+                          >
+                            ✓ Needle Present
+                          </div>
+                        )}
+                        {shape.properties.notSuitableForUse && (
+                          <div
+                            style={{
+                              background: "#ffccc7",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                            }}
+                          >
+                            ⚠ Not Suitable
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </List.Item>
               )}
             />

@@ -24,6 +24,8 @@ const [tempShape, setTempShape] = useState(null); // For shapes being drawn
   const [currentNodule, setCurrentNodule] = useState(null);
  
   const [currentShape, setCurrentShape] = useState(null);
+  const [unsavedProperties, setUnsavedProperties] = useState({});
+
   const [activeShapeForProperties, setActiveShapeForProperties] = useState(null);
 
 const [shapeProperties, setShapeProperties] = useState({
@@ -51,6 +53,8 @@ const [shapeProperties, setShapeProperties] = useState({
     parenchyma: "purple",
   };
   const [editingShape, setEditingShape] = useState(null);
+  const [hasChanges, setHasChanges] = useState(false);
+
   useEffect(
     () => {
       if (!canvasRef.current || !imageUrl) return;
@@ -382,55 +386,24 @@ const [shapeProperties, setShapeProperties] = useState({
   // Modify highlightShape to handle selection
  
    // Highlight the shape visually
-   const highlightShape = (shape) => {
-    // Clear all highlights first
-    paper.project.activeLayer.children.forEach(item => {
-      if (item.data.id) {
-        item.strokeColor = shapes.find(s => s.id === item.data.id)?.strokeColor || item.data.strokeColor;
-        item.strokeWidth = 2;
-      }
-    });
-  
-    // Find and highlight the selected shape
-    const itemToHighlight = paper.project.activeLayer.children.find(item => 
-      item.data.id === shape.id
-    );
-    
-    if (itemToHighlight) {
-      itemToHighlight.strokeColor = 'yellow';
-      itemToHighlight.strokeWidth = 3;
-      itemToHighlight.bringToFront();
+   const highlightShape = useCallback((shape) => {
+    if (!shape) {
+      setSelectedShape(null);
+      return;
     }
   
-    // Update selected shape and properties
     setSelectedShape(shape);
-    // Update shapeProperties with ALL properties including checkboxes
-  setShapeProperties(prev => ({
-    ...prev,
-    [shape.dataType]: {
-      ...prev[shape.dataType],
-      ...shape.properties // This includes checkbox values
-    }
-  }));
-
-     // Pulse animation for new shapes
-  if (shape.justCreated) {
-    const path = paper.project.getItem({ data: { id: shape.id } });
-    path.tween(
-      { strokeWidth: 5 },
-      { strokeWidth: 2 },
-      { duration: 1000 }
-    );
-  }
-    if (shape.properties) {
-      setShapeProperties(prev => ({
-        ...prev,
-        [shape.dataType]: shape.properties
-      }));
-    }
-  
-    paper.view.update();
-  };
+    setHasChanges(false); // Reset unsaved changes when selecting new shape
+    
+    // Initialize shapeProperties with the shape's current properties
+    setShapeProperties(prev => ({
+      ...prev,
+      [shape.dataType]: {
+        ...prev[shape.dataType],
+        ...shape.properties
+      }
+    }));
+  }, []);
   // Add delete functionality
   const deleteSelectedShape = () => {
     if (!selectedShape) return;
@@ -462,6 +435,7 @@ const [shapeProperties, setShapeProperties] = useState({
     setCurrentShape(null);
     setShapeProperties({});
   };
+
   /* too see what functionality to add 
   const handleShapeClick = (shape) => {
     if (editingShape) {
@@ -565,7 +539,53 @@ const [shapeProperties, setShapeProperties] = useState({
     setMode(null);
   };
   */
+  const handlePropertyChange = useCallback((property, value) => {
+    if (!selectedShape) return;
   
+    // For checkboxes - save immediately
+    if (['measured', 'needleInNodule', 'notSuitableForUse'].includes(property)) {
+      setShapes(prev => prev.map(shape => 
+        shape.id === selectedShape.id
+          ? { ...shape, properties: { ...shape.properties, [property]: value } }
+          : shape
+      ));
+      setHasChanges(true); // Mark that changes occurred
+    } 
+    // For other properties
+    else {
+      setHasChanges(true);
+    }
+  
+    // Always update the shapeProperties for UI
+    setShapeProperties(prev => ({
+      ...prev,
+      [selectedShape.dataType]: {
+        ...prev[selectedShape.dataType],
+        [property]: value
+      }
+    }));
+  }, [selectedShape]);
+  const handleSaveProperties = useCallback(() => {
+    if (!selectedShape || !hasChanges) return;
+  
+    // Save all current properties (including checkbox states)
+    setShapes(prev => prev.map(shape => 
+      shape.id === selectedShape.id
+        ? { 
+            ...shape, 
+            properties: {
+              ...shape.properties,
+              ...shapeProperties[selectedShape.dataType]
+            }
+          }
+        : shape
+    ));
+  
+    // Reset states
+    setHasChanges(false);
+    setSelectedShape(null);
+    message.success('Changes saved successfully!');
+  }, [selectedShape, hasChanges, shapeProperties]);
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       {/* Left Sidebar */}
@@ -700,52 +720,9 @@ const [shapeProperties, setShapeProperties] = useState({
         <PropertiesSidebar
       shape={selectedShape}
       properties={shapeProperties}
-      onPropertiesChange={(property, value) => {
-        // Force immediate state update for checkboxes
-        setShapeProperties(prev => ({
-          ...prev,
-          [selectedShape.dataType]: {
-            ...prev[selectedShape.dataType],
-            [property]: value
-          }
-        }));
-        
-        // Auto-save checkbox changes immediately
-        if (['measured', 'needleInNodule', 'notSuitableForUse'].includes(property)) {
-          const updatedShapes = shapes.map(s => 
-            s.id === selectedShape.id 
-              ? { 
-                  ...s, 
-                  properties: {
-                    ...s.properties,
-                    [property]: value
-                  }
-                } 
-              : s
-          );
-          setShapes(updatedShapes);
-        }
-      }}
-      onSave={() => {
-        if (selectedShape) {
-          // Get ALL current properties (including any unsaved checkbox changes)
-          const currentProps = {
-            ...selectedShape.properties,
-            ...shapeProperties[selectedShape.dataType]
-          };
-          
-          const updatedShapes = shapes.map(s => 
-            s.id === selectedShape.id 
-              ? { ...s, properties: currentProps } 
-              : s
-          );
-          
-          setShapes(updatedShapes);
-          message.success('All properties saved!');
-          setSelectedShape(null); // Deselect after saving
-         
-        }
-      }}
+      hasChanges={hasChanges}
+      onPropertiesChange={handlePropertyChange}
+      onSave={handleSaveProperties}
     />
 
       

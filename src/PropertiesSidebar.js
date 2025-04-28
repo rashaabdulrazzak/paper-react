@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {sidebarStyle,propertyFieldStyle,selectStyle,buttonGroupStyle,saveButtonStyle} from "./styles"
-const PropertiesSidebar = ({ shape, properties, onPropertiesChange, onSave }) => {
+const PropertiesSidebar = ({ shape, properties, onPropertiesChange, onSave,hasChanges }) => {
     const PROPERTY_OPTIONS = {
         'nodule-polygon': {
             composition: ['Cystic', 'Spongiform', 'Mixed', 'Solid', 'Other'],
@@ -69,13 +69,20 @@ const PropertiesSidebar = ({ shape, properties, onPropertiesChange, onSave }) =>
           )}
     
           {shape.dataType !== 'strap' && (
-            <><button
-              onClick={onSave}
-              disabled={!Object.values(currentProperties).every(val => val)}
-              style={saveButtonStyle}
-            >
-              Save Changes
-            </button></>
+        <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSave();
+        }}
+        style={{
+          ...saveButtonStyle,
+          opacity: hasChanges ? 1 : 0.6,
+          cursor: hasChanges ? 'pointer' : 'not-allowed'
+        }}
+        disabled={!hasChanges}
+      >
+        Save Changes
+      </button>
           )}
         </div>
       );

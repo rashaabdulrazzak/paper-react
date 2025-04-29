@@ -13,7 +13,7 @@ const ImageWithShapes = () => {
   const [imageUrl, setImageUrl] = useState(
     "https://letsenhance.io/static/73136da51c245e80edc6ccfe44888a99/1015f/MainBefore.jpg"
   );
-  const [shapes, setShapes] = useState([]);
+ 
 
 const [tempShape, setTempShape] = useState(null); // For shapes being drawn
 
@@ -27,6 +27,14 @@ const [tempShape, setTempShape] = useState(null); // For shapes being drawn
   const [unsavedProperties, setUnsavedProperties] = useState({});
 
   const [activeShapeForProperties, setActiveShapeForProperties] = useState(null);
+  const [history, setHistory] = useState({
+    past: [],       // Past states
+    present: [],    // Current shapes (initialize empty)
+    future: []      // Redo stack
+  });
+  
+  // Replace your existing `shapes` state with:
+  const [shapes, setShapes] = useState([]); 
 
 const [shapeProperties, setShapeProperties] = useState({
   'nodule-polygon': {
@@ -55,6 +63,60 @@ const [shapeProperties, setShapeProperties] = useState({
   const [editingShape, setEditingShape] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const updateShapes = (newShapes) => {
+    setShapes(newShapes);
+    setHistory(prev => ({
+      past: [...prev.past, prev.present],
+      present: newShapes,
+      future: [] // Clear redo stack on new action
+    }));
+  };
+  
+  const undo = useCallback(() => {
+    setHistory(prev => {
+      if (prev.past.length === 0) return prev;
+     
+      const newPresent = prev.past[prev.past.length - 1];
+      return {
+        past: prev.past.slice(0, -1),
+        present: newPresent,
+        future: [prev.present, ...prev.future]
+      };
+    });
+  }, []);
+  
+  const redo = useCallback(() => {
+    setHistory(prev => {
+      if (prev.future.length === 0) return prev;
+      
+      return {
+        past: [...prev.past, prev.present],
+        present: prev.future[0],
+        future: prev.future.slice(1)
+      };
+    });
+  }, []);
+  
+  // Sync history.present with shapes
+  useEffect(() => {
+    setShapes(history.present);
+  }, [history.present]);
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && history.past.length > 0) {
+          e.preventDefault();
+          undo();
+        } else if (e.key === 'y' && history.future.length > 0) {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+  
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [history, undo, redo]);
   useEffect(
     () => {
       if (!canvasRef.current || !imageUrl) return;
@@ -79,20 +141,20 @@ const [shapeProperties, setShapeProperties] = useState({
         paper.view.zoom = Math.min(Math.max(newZoom, 0.1), 10); // Limit zoom range
       };
       // Add this new handler for polygon drawing preview
-  paper.view.onMouseMove = (event) => {
-    if (polygonPoints.length > 0) {
-      // Show preview of the current polygon
-      redrawShapes(); // Redraws existing shapes + temporary polygon
-      new paper.Path({
-        segments: [...polygonPoints, [event.point.x, event.point.y]],
-        strokeColor: tempShape?.strokeColor || 'black',
-        strokeWidth: 1,
-        dashArray: [4, 4],
-        closed: false
-      });
-      paper.view.update();
-    }
-  };
+      paper.view.onMouseMove = (event) => {
+        if (polygonPoints.length > 0) {
+          // Show preview of the current polygon
+          redrawShapes(); // Redraws existing shapes + temporary polygon
+          new paper.Path({
+            segments: [...polygonPoints, [event.point.x, event.point.y]],
+            strokeColor: tempShape?.strokeColor || 'black',
+            strokeWidth: 1,
+            dashArray: [4, 4],
+            closed: false
+          });
+          paper.view.update();
+        }
+      };
       redrawShapes(); // Draw existing shapes immediately after setup
 
       const handleMouseDown = (event) => {
@@ -130,14 +192,16 @@ const [shapeProperties, setShapeProperties] = useState({
 
       return () => {
         paper.view.off("mousedown");
-        // If we have a currentNodule but cancel without saving
-        if (currentNodule) {
-          setCurrentNodule(null);
-        }
+        paper.view.off("mousemove");
+        paper.view.off("mousedrag");
+        paper.view.off("mousewheel");
+        paper.view.off("mouseup");
+        
       };
     },
-    [imageUrl, mode],
-    currentNodule
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [imageUrl, mode]
+    
   );
 
   // Redraw everything whenever shapes or polygonPoints change
@@ -149,12 +213,10 @@ const [shapeProperties, setShapeProperties] = useState({
 
   const redrawShapes = useCallback(() => {
     if (!paper.project) return;
-  
-    paper.project.activeLayer.removeChildren(); // Clear canvas
-  
-    // Draw finalized shapes only
+    paper.project.activeLayer.removeChildren();
+
+    // Only redraw changed shapes
     shapes.forEach(shape => {
-      const isSelected = selectedShape?.id === shape.id;
       const path = shape.type === 'circle' 
         ? new paper.Path.Circle({
             center: new paper.Point(shape.center[0], shape.center[1]),
@@ -165,21 +227,24 @@ const [shapeProperties, setShapeProperties] = useState({
             closed: true
           });
   
-      path.strokeColor = isSelected ? 'yellow' : shape.strokeColor;
-      path.strokeWidth = isSelected ? 3 : shape.properties ? 2 : 1;
-      path.data = { id: shape.id, strokeColor: shape.strokeColor };
+      path.strokeColor = shape.id === selectedShape?.id ? 'yellow' : shape.strokeColor;
+      path.strokeWidth = shape.id === selectedShape?.id ? 3 : 2;
+      path.data = { id: shape.id };
     });
-    // Draw temporary polygon (committed points)
-  if (polygonPoints.length > 0) {
-    new paper.Path({
-      segments: polygonPoints,
-      strokeColor: tempShape?.strokeColor || 'black',
-      strokeWidth: 2,
-      closed: false // Don't close until finished
-    });
-  }
+  
+    // Draw temporary polygon
+    if (polygonPoints.length > 0) {
+      new paper.Path({
+        segments: polygonPoints,
+        strokeColor: tempShape?.strokeColor || 'black',
+        strokeWidth: 2,
+        closed: false
+      });
+    }
   
     paper.view.update();
+  
+  
   }, [shapes, polygonPoints, selectedShape, tempShape]);
 
   const finishPolygon = () => {
@@ -191,10 +256,12 @@ const [shapeProperties, setShapeProperties] = useState({
           // Initialize ALL properties including checkboxes
           ...shapeProperties[tempShape.dataType],
           ...tempShape.properties
-        }
+        },
+        createdAt: new Date().toISOString() 
       };
   
-      setShapes(prev => [...prev, finalizedShape]);
+     // setShapes(prev => [...prev, finalizedShape]);
+     updateShapes([...shapes, finalizedShape]);
       setPolygonPoints([]);
       setTempShape(null);
       
@@ -202,7 +269,7 @@ const [shapeProperties, setShapeProperties] = useState({
       highlightShape(finalizedShape);
       
       // Reset properties for next shape
-      if (finalizedShape.dataType === 'nodule-polygon') {
+      /*if (finalizedShape.dataType === 'nodule-polygon') {
         setShapeProperties(prev => ({
           ...prev,
           'nodule-polygon': {
@@ -220,7 +287,7 @@ const [shapeProperties, setShapeProperties] = useState({
             heterojenitesi: ''
           }
         }));
-      }
+      }*/
     }
   };
 
@@ -246,7 +313,8 @@ const [shapeProperties, setShapeProperties] = useState({
   };
 
   const clearAll = () => {
-    setShapes([]);
+    //setShapes([]);
+    updateShapes([]);
     setPolygonPoints([]);
   };
   const handleResize = () => {
@@ -258,7 +326,7 @@ const [shapeProperties, setShapeProperties] = useState({
       });
     }
   };
-
+ 
   // Set initial canvas size based on the image size
   // and update it on window resize
   useEffect(() => {
@@ -436,109 +504,7 @@ const [shapeProperties, setShapeProperties] = useState({
     setShapeProperties({});
   };
 
-  /* too see what functionality to add 
-  const handleShapeClick = (shape) => {
-    if (editingShape) {
-      setEditingShape(null);
-    } else {
-      setEditingShape(shape);
-      setSelectedShape(shape);
-      highlightShape(shape);
-    }
-  };
-  const handleShapeMouseOver = (shape) => {
-    if (editingShape) {
-      setEditingShape(shape);
-    }
-  };
-  const handleShapeMouseOut = () => {
-    if (editingShape) {
-      setEditingShape(null);
-    }
-  };
-  const handleShapeSelect = (shape) => {
-    setSelectedShape(shape);
-    highlightShape(shape);
-  };
-  const handleShapeDeselect = () => {
-    setSelectedShape(null);
-  };
-  const handleShapeEdit = (shape) => {
-    setEditingShape(shape);
-    setSelectedShape(shape);
-  };
-  const handleShapeDelete = (shape) => {
-    setShapes((prev) => prev.filter((s) => s.id !== shape.id));
-    setSelectedShape(null);
-  };
-  const handleShapePropertiesChange = (property, value) => {
-    if (selectedShape) {
-      setShapeProperties((prev) => ({
-        ...prev,
-        [selectedShape.dataType]: {
-          ...prev[selectedShape.dataType],
-          [property]: value,
-        },
-      }));
-    }
-  };
-  const handleShapeSave = () => {
-    if (selectedShape) {
-      const updatedShapes = shapes.map((s) =>
-        s.id === selectedShape.id
-          ? { ...s, properties: shapeProperties[selectedShape.dataType] }
-          : s
-      );
-      setShapes(updatedShapes);
-      message.success("Properties updated successfully!");
-    }
-  };
-  const handleShapeCancel = () => {
-    setEditingShape(null);
-    setSelectedShape(null);
-  };
-  const handleShapePropertiesSave = () => {
-    if (selectedShape) {
-      const updatedShapes = shapes.map((s) =>
-        s.id === selectedShape.id
-          ? { ...s, properties: shapeProperties[selectedShape.dataType] }
-          : s
-      );
-      setShapes(updatedShapes);
-      message.success("Properties updated successfully!");
-    }
-  };
-  const handleShapePropertiesCancel = () => {
-    setEditingShape(null);
-    setSelectedShape(null);
-  };
-  const handleShapePropertiesDelete = () => {
-    if (selectedShape) {
-      setShapes((prev) => prev.filter((s) => s.id !== selectedShape.id));
-      setSelectedShape(null);
-    }
-  };
-  const startEditingShape = (shape) => {
-    setEditingShape(shape);
-    setMode(shape.dataType);
-    setPolygonPoints(shape.points || []);
-  };
-  const saveEditedShape = () => {
-    if (editingShape && polygonPoints.length >= 3) {
-      setShapes(shapes.map(s => 
-        s.id === editingShape.id 
-          ? { ...s, points: [...polygonPoints] } 
-          : s
-      ));
-      cancelEditing();
-    }
-  };
-  const cancelEditing = () => {
-    setEditingShape(null);
-    setPolygonPoints([]);
-    setMode(null);
-  };
-  */
+  
   const handlePropertyChange = useCallback((property, value) => {
     if (!selectedShape) return;
   
@@ -569,6 +535,7 @@ const [shapeProperties, setShapeProperties] = useState({
     if (!selectedShape || !hasChanges) return;
   
     // Save all current properties (including checkbox states)
+   
     setShapes(prev => prev.map(shape => 
       shape.id === selectedShape.id
         ? { 
@@ -688,6 +655,34 @@ const [shapeProperties, setShapeProperties] = useState({
               Load From File
             </button>
           </div>
+          <div style={{ marginTop: "10px", display: 'flex', gap: '10px' }}>
+  <button
+    onClick={undo}
+    disabled={history.past.length === 0}
+    style={{
+      padding: '5px 10px',
+      background: history.past.length === 0 ? '#f5f5f5' : '#1890ff',
+      color: history.past.length === 0 ? '#d9d9d9' : 'white',
+      border: 'none',
+      borderRadius: '4px'
+    }}
+  >
+    Undo (Ctrl+Z)
+  </button>
+  <button
+    onClick={redo}
+    disabled={history.future.length === 0}
+    style={{
+      padding: '5px 10px',
+      background: history.future.length === 0 ? '#f5f5f5' : '#52c41a',
+      color: history.future.length === 0 ? '#d9d9d9' : 'white',
+      border: 'none',
+      borderRadius: '4px'
+    }}
+  >
+    Redo (Ctrl+Y)
+  </button>
+</div>
         </div>
       
        <div style={{ position: 'relative', border: '1px solid #ccc' }}>

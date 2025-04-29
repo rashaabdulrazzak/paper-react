@@ -111,11 +111,16 @@ const [shapeProperties, setShapeProperties] = useState({
           e.preventDefault();
           redo();
         }
+      } else if (e.key === 'Escape') {
+        // Cancel polygon drawing
+        setPolygonPoints([]);
+        setTempShape(null);
+        message.info('Drawing cancelled.');
       }
     };
   
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
   }, [history, undo, redo]);
   useEffect(
     () => {

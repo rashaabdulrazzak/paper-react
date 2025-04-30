@@ -62,6 +62,10 @@ const [shapeProperties, setShapeProperties] = useState({
   };
   const [editingShape, setEditingShape] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [selectedShapeIndex, setSelectedShapeIndex] = useState(null);
+  const [drawingMode, setDrawingMode] = useState(false);
+
+  let selectedItemRef = null;
 
   const updateShapes = (newShapes) => {
     setShapes(newShapes);
@@ -116,12 +120,16 @@ const [shapeProperties, setShapeProperties] = useState({
         setPolygonPoints([]);
         setTempShape(null);
         message.info('Drawing cancelled.');
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShape) {
+        setShapes(prev => prev.filter(shape => shape.id !== selectedShape.id));
+        setSelectedShape(null);
+        message.success('Shape deleted.');
       }
     };
   
     window.addEventListener('keydown', handleKeyDown);
   return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, undo, redo]);
+  }, [history, undo, redo, selectedShape]);
   useEffect(
     () => {
       if (!canvasRef.current || !imageUrl) return;
@@ -163,6 +171,10 @@ const [shapeProperties, setShapeProperties] = useState({
       redrawShapes(); // Draw existing shapes immediately after setup
 
       const handleMouseDown = (event) => {
+        
+        const point = new paper.Point(event.point.x, event.point.y);
+        
+        if (drawingMode) {
         if (mode === "circle") {
           const newShape = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2),
@@ -191,6 +203,53 @@ const [shapeProperties, setShapeProperties] = useState({
           setPolygonPoints(prev => [...prev, [event.point.x, event.point.y]]);
         
         }
+      }
+         // Deselect previous selection
+        if (selectedItemRef) {
+          selectedItemRef.selected = false;
+          selectedItemRef = null;
+        }   
+        if (
+          point.x < 0 ||
+          point.x > canvasSize.width ||
+          point.y < 0 ||
+          point.y > canvasSize.height
+        ) {
+          console.log("Click outside canvas bounds");
+          return;
+        }
+        // If not in drawing mode, check if the click is on an existing shape
+        if (!drawingMode) {
+          const hitResult = paper.project.hitTest(point, {
+            fill: true,
+            stroke: true,
+            segments: true,
+            tolerance: 25,
+          });
+          if (hitResult && hitResult.item) {
+            selectedItemRef = hitResult.item;
+            selectedItemRef.selected = true; // this highlights it
+            console.log("Selected shape:", selectedItemRef.data);
+            let shape = shapes.find(shape => shape.id === selectedItemRef.data.id);
+            if (shape) {
+              setSelectedShape(shape);
+            } else {
+              setSelectedShape(null);
+            }
+            setSelectedShape(selectedItemRef.data);
+            setCurrentShape(shape);
+            setActiveShapeForProperties(shape);
+            setUnsavedProperties(shape.properties || {});
+           
+            highlightShape(shape);
+            
+             
+            setSelectedShapeIndex(shapes.findIndex(shape => shape.id === selectedItemRef.data.id));
+          } else {
+            setSelectedShape(null);
+          }
+        }
+      
       };
 
       paper.view.onMouseDown = handleMouseDown;
@@ -253,7 +312,12 @@ const [shapeProperties, setShapeProperties] = useState({
   }, [shapes, polygonPoints, selectedShape, tempShape]);
 
   const finishPolygon = () => {
+    setMode(null);
+    if (drawingMode) {
+      setDrawingMode(false);
+    }
     if (polygonPoints.length >= 3 && tempShape) {
+    console.log("drawingMode:", drawingMode);
       const finalizedShape = {
         ...tempShape,
         points: [...polygonPoints],
@@ -271,7 +335,7 @@ const [shapeProperties, setShapeProperties] = useState({
       setTempShape(null);
       
       // Keep the shape selected (remove the setTimeout)
-      highlightShape(finalizedShape);
+      highlightShape(finalizedShape); 
       
       // Reset properties for next shape
       /*if (finalizedShape.dataType === 'nodule-polygon') {
@@ -460,6 +524,7 @@ const [shapeProperties, setShapeProperties] = useState({
  
    // Highlight the shape visually
    const highlightShape = useCallback((shape) => {
+    console.log("Highlighting shape:", shape);
     if (!shape) {
       setSelectedShape(null);
       return;
@@ -571,7 +636,7 @@ const [shapeProperties, setShapeProperties] = useState({
           <div style={{ marginBottom: "10px" }}>
             <strong>Nodule Annotations:</strong>
             <button
-              onClick={() => setMode("circle")}
+              onClick={() => {setMode("circle"); setDrawingMode(true);}}
               style={{
                 margin: "0 10px",
                 fontWeight: mode === "circle" ? "bold" : "normal",
@@ -581,7 +646,7 @@ const [shapeProperties, setShapeProperties] = useState({
               Circle
             </button>
             <button
-              onClick={() => setMode("nodule-polygon")}
+              onClick={() => {setMode("nodule-polygon"); setDrawingMode(true);}}
               style={{
                 fontWeight: mode === "nodule-polygon" ? "bold" : "normal",
                 color: COLORS.nodule,
@@ -594,7 +659,11 @@ const [shapeProperties, setShapeProperties] = useState({
           <div style={{ marginBottom: "10px" }}>
             <strong>Region Annotations:</strong>
             <button
-              onClick={() => setMode("strap")}
+              onClick={() => {
+                setMode("strap");
+                setDrawingMode(true);
+                
+              }}
               style={{
                 margin: "0 10px",
                 fontWeight: mode === "strap" ? "bold" : "normal",
@@ -604,7 +673,7 @@ const [shapeProperties, setShapeProperties] = useState({
               Strap Kasi
             </button>
             <button
-              onClick={() => setMode("parenchyma")}
+              onClick={() => {setMode("parenchyma"); setDrawingMode(true);}}
               style={{
                 fontWeight: mode === "parenchyma" ? "bold" : "normal",
                 color: COLORS.parenchyma,

@@ -25,7 +25,6 @@ const PropertiesSidebar = ({ shape, properties, onPropertiesChange, onSave,hasCh
     
       const currentOptions = PROPERTY_OPTIONS[shape.dataType] || {};
       const currentProperties = properties[shape.dataType] || {};
-      console.log("Rendering with properties:", currentProperties);
       return (
         <div style={sidebarStyle}>
           <h3>

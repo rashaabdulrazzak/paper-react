@@ -313,52 +313,30 @@ const [shapeProperties, setShapeProperties] = useState({
 
   const finishPolygon = () => {
     setMode(null);
-    if (drawingMode) {
-      setDrawingMode(false);
-    }
+    setDrawingMode(false);
+  
     if (polygonPoints.length >= 3 && tempShape) {
-    console.log("drawingMode:", drawingMode);
+      console.log("drawingMode:", drawingMode);
+  
+      const baseProps = shapeProperties[tempShape.dataType] || {};
+      
       const finalizedShape = {
         ...tempShape,
         points: [...polygonPoints],
         properties: {
-          // Initialize ALL properties including checkboxes
-          ...shapeProperties[tempShape.dataType],
+          ...baseProps,
           ...tempShape.properties
         },
-        createdAt: new Date().toISOString() 
+        createdAt: new Date().toISOString()
       };
   
-     // setShapes(prev => [...prev, finalizedShape]);
-     updateShapes([...shapes, finalizedShape]);
+      updateShapes([...shapes, finalizedShape]);
       setPolygonPoints([]);
       setTempShape(null);
-      
-      // Keep the shape selected (remove the setTimeout)
-      highlightShape(finalizedShape); 
-      
-      // Reset properties for next shape
-      /*if (finalizedShape.dataType === 'nodule-polygon') {
-        setShapeProperties(prev => ({
-          ...prev,
-          'nodule-polygon': {
-            composition: '',
-            echogenicity: '',
-            shape: '',
-            margin: '',
-            echogenicFoci: ''
-          }
-        }));
-      } else if (finalizedShape.dataType === 'parenchyma') {
-        setShapeProperties(prev => ({
-          ...prev,
-          'parenchyma': {
-            heterojenitesi: ''
-          }
-        }));
-      }*/
+      highlightShape(finalizedShape);
     }
   };
+  
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -412,21 +390,7 @@ const [shapeProperties, setShapeProperties] = useState({
     }
   }, [canvasSize]);
 
-  // Hadles for saving and loading annotations
-  /*const saveAnnotations = () => {
-    const annotations = shapes.map(shape => ({
-      type: shape.type,
-      points: shape.type === 'polygon' ? shape.points : [shape.center],
-      dataType: shape.dataType
-    }));
-    const blob = new Blob([JSON.stringify(annotations)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'annotations.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  };*/
+ 
   const saveAnnotations = () => {
     const annotationData = {
       imageUrl: imageUrl,
@@ -445,15 +409,7 @@ const [shapeProperties, setShapeProperties] = useState({
     // Save to localStorage (or you could send to a server)
     localStorage.setItem("savedAnnotations", dataStr);
 
-    // Optionally: Download as a file
-    /* const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `annotations_${new Date().toISOString()}.json`;
-    a.click();
-    
-    alert('Annotations saved successfully!');*/
+   
   };
 
   const loadAnnotations = () => {
@@ -503,23 +459,7 @@ const [shapeProperties, setShapeProperties] = useState({
     reader.readAsText(file);
   };
   // sidebar for annotation types
-  // Calculate shape counts by type
-  const shapeCounts = shapes.reduce((acc, shape) => {
-    const type = shape.dataType || "unknown";
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Group shapes by type for the sidebar
-  const groupedShapes = shapes.reduce((acc, shape) => {
-    const type = shape.dataType || "unknown";
-    if (!acc[type]) {
-      acc[type] = [];
-    }
-    acc[type].push(shape);
-    return acc;
-  }, {});
-  // Function to highlight a shape when clicked in the sidebar
+ 
   // Modify highlightShape to handle selection
  
    // Highlight the shape visually
@@ -542,37 +482,7 @@ const [shapeProperties, setShapeProperties] = useState({
       }
     }));
   }, []);
-  // Add delete functionality
-  const deleteSelectedShape = () => {
-    if (!selectedShape) return;
 
-    setShapes((prev) => prev.filter((shape) => shape.id !== selectedShape.id));
-    setSelectedShape(null);
-  };
-  const saveNoduleProperties = (properties) => {
-    if (!currentNodule) return;
-
-    const finalizedNodule = {
-      ...currentNodule,
-      properties: properties, // Add the selected properties
-    };
-
-    // Add to shapes only once here
-    setShapes((prev) => [...prev, finalizedNodule]);
-    setCurrentNodule(null);
-  };
-  const saveShapeProperties = (properties) => {
-    if (!currentShape) return;
-
-    const finalizedShape = {
-      ...currentShape,
-      properties: properties,
-    };
-
-    setShapes((prev) => [...prev, finalizedShape]);
-    setCurrentShape(null);
-    setShapeProperties({});
-  };
 
   
   const handlePropertyChange = useCallback((property, value) => {
